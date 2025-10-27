@@ -22,6 +22,7 @@
 void create_window(void);
 void get_mouse_pos(void);
 void goto_mouse(void);
+void grab_keys(void);
 void setup(void);
 void quit(void);
 void run(void);
@@ -43,7 +44,6 @@ struct mouse mouse;
 struct pet pet;
 
 Bool running = False;
-Bool chasing = False;
 
 void create_window(void)
 {
@@ -102,6 +102,24 @@ void goto_mouse(void)
 	XMoveWindow(dpy, pet.window, pet.x, pet.y);
 }
 
+void grab_keys(void)
+{
+	unsigned int modifiers[] = {
+		0, LockMask, Mod2Mask, LockMask | Mod2Mask
+	};
+
+	for (unsigned int i = 0; i < 2; i++) {
+		KeyCode code = XKeysymToKeycode(dpy, bindings[i].sym);
+		for (unsigned int j = 0; j < sizeof(modifiers) / sizeof(modifiers[0]); j++) {
+			XGrabKey(
+				dpy, code,
+				bindings[i].mask | modifiers[j],
+				root, True, GrabModeAsync, GrabModeAsync
+			);
+		}
+	}
+}
+
 void setup(void)
 {
 	dpy = XOpenDisplay(NULL);
@@ -116,6 +134,9 @@ void setup(void)
 	root = RootWindow(dpy, scr);
 
 	create_window();
+	grab_keys();
+
+	XSelectInput(dpy, root, KeyPressMask | KeyReleaseMask);
 }
 
 void quit(void)
@@ -131,9 +152,20 @@ void run(void)
 		while (XPending(dpy)) {
 			XEvent ev;
 			XNextEvent(dpy, &ev);
+
+			if (ev.type == KeyPress) {
+				KeySym sym = XLookupKeysym(&ev.xkey, 0);
+				if (sym == bindings[0].sym) {
+					pet.chasing = !pet.chasing;
+				}
+				else if (sym == bindings[1].sym) {
+					quit();
+				}
+			}
+
 		}
 
-		if (chasing) {
+		if (pet.chasing) {
 			goto_mouse();
 		}
 		xsleep(PET_REFRESH);
