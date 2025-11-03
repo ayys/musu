@@ -730,7 +730,7 @@ int main(int argc, char** argv)
 {
 	(void)argv;
 	if (argc > 1) {
-		printf("xpets " VERSION "\n> uint 2025");
+		printf("xpets " VERSION "\n> uint 2025\n");
 		return 0;
 	}
 	setup();
