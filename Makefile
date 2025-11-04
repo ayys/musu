@@ -5,8 +5,8 @@ PKG_CONFIG ?= pkg-config
 # install dirs
 PREFIX ?= /usr/local
 DESTDIR ?=
-BIN := xpet
-MAN := xpet.1
+BIN := musu
+MAN := musu.1
 MAN_DIR := $(PREFIX)/share/man/man1
 
 # layout

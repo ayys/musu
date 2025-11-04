@@ -1,5 +1,5 @@
 {
-  description = "xpet is a small desktop pet for x11 written in c";
+  description = "musu is a small desktop pet for x11 written in c";
 
   inputs = {
     nixpkgs.url = "nixpkgs/nixos-unstable";
@@ -13,7 +13,7 @@
       {
         packages = rec {
           musu = pkgs.stdenv.mkDerivation {
-            name = "xpet";
+            name = "musu";
             src = ./.;
             buildInputs = with pkgs; [
               gcc
@@ -23,8 +23,6 @@
               xorg.libXft
               pkg-config
               fontconfig
-              lohit-fonts.devanagari
-              xlsfonts
             ];
             # Skip the configure phase as it's a simple 'make' build
             dontConfigure = true;

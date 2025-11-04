@@ -1,6 +1,6 @@
-![](xpet_logo_10x.png)  
+![](musu_logo_10x.png)  
 
-#### xpet is a small desktop pet for x11 written in c
+#### musu is a small desktop pet for x11 written in c
 
 ---
 
@@ -23,7 +23,7 @@ make
 Run with:
 
 ```
-./xpet
+./musu
 ```
 
 ---
@@ -50,5 +50,5 @@ neko/
 ...
 ```
 
-each directory name matches an animation state defined in `xpet.h`.  
+each directory name matches an animation state defined in `musu.h`.  
 frames are loaded in numeric order (`0.xpm`, `1.xpm`, ...) until no more are found  
