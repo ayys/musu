@@ -4,7 +4,10 @@
 
 #include "xpet.h"
 
-#define PET_ASSET_DIR   "/home/uint/programming/c/xpet/pets/neko"
+#define PET_SPEED       2       /* pixels per frame - constant movement speed */
+#define PET_REFRESH     24      /* ms between movement updates (16ms=60fps) */
+#define FRAME_DURATION  200     /* ms between frames (can be overridden per frame) */
+#define PET_ASSET_DIR   "./pets/neko"
 
 #define PET_SPEED       20      /* pixels per frame - constant movement speed               */
 #define PET_REFRESH     200     /* ms between movement updates (16ms=60fps)                 */
@@ -27,14 +30,45 @@
 
 /* speech phrases */
 const char* pet_phrases[] = {
-	"Lorem ipsum dolor sit amet, consectetur adipiscing elit...",
-	NULL  /* sentinel, do not remove */
+    // माया लाग्दो र मीठो
+    "म्याऊ! माया गर, माया गर, अझै धेरै माया गर!", 
+    "मुसुलाई तिमी सबभन्दा धेरै मन पर्छ, म्याऊ।", 
+    "मुसु यहीँ सुत्छु है। न्यानो छ!", 
+    "चुरु नदिए टोकिदिन्छु नि~!", 
+    "मुसु! अँगालो हालूँ?", 
+    "म्याऊ, म्याऊ, म तिर हेर त!", 
+    "काँख उधारो लिएँ है!", 
+
+    // आग्रहपूर्ण र चुलबुले
+    "खाना! खाना! पेट खाली छ, म्याऊ।", 
+    "खिलौना दिनुहोस्! खेल्न मन लाग्यो नि, म्याऊ!", 
+    "अझै सुत्ने? उठ! उठ! म्याऊ!", 
+    "मुसुलाई समातेर 'हाई-हाई' गर न!", 
+    "सीरक अर्को एउटा चाहियो, म्याऊ।", 
+    "माछाको सपना देखें नि, म्याऊ।", 
+
+    // प्यारो र अल्लारे
+    "'गुथा-गुथ' राम्रो गर्छु नि, होइन र?", 
+    "बाकस, बाकस! यो मुसुको हो नि।", 
+    "पुच्छर हल्लाउनु भनेको म खुसी छु भनेको नि।", 
+    "मेरो पुठ्ठा प्यारो छ, म्याऊ?", 
+    "माफ गर्नुहोस्, त्यो ग्लास खसालें मैले।", 
+    "पल्टिएर सुतेँ! पेटमा माया गर्नुहोस् न, म्याऊ।", 
+
+    // Short and Punchy (छोटो र दमदार)
+    "म्याऊ-म्याऊ।", 
+    "खाना आयो?", 
+    "धेरै मन पर्छ!",
+    "निन्द्रा लाग्यो...", 
+    "के हो?",
+    "च्याप।", 
+    NULL  /* sentinel, do not remove */
 };
 
 struct bind bindings[] = {
-	{.sym = XK_f, .mask = Mod1Mask}, /* call/chase toggle */
-	{.sym = XK_s, .mask = Mod1Mask}, /* freeze toggle */
-	{.sym = XK_q, .mask = Mod1Mask}, /* quit */
+	{.sym = XK_f, .mask = Mod1Mask | ShiftMask}, /* call/chase toggle */
+	{.sym = XK_s, .mask = Mod1Mask | ShiftMask}, /* freeze toggle */
+	{.sym = XK_q, .mask = Mod1Mask | ShiftMask}, /* quit */
 };
 
 struct animation animations[] = {
