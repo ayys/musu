@@ -8,7 +8,7 @@ DESTDIR ?=
 BIN := musu
 MAN := musu.1
 MAN_DIR := $(PREFIX)/share/man/man1
-
+ASSET_DIR := $(PREFIX)/share/musu
 # layout
 SRC_DIR := ./
 OBJ_DIR := obj/
@@ -61,6 +61,10 @@ install: all
 	@echo "installing $(BIN) to $(DESTDIR)$(PREFIX)/bin..."
 	@mkdir -p "$(DESTDIR)$(PREFIX)/bin"
 	@install -m 755 $(BIN) "$(DESTDIR)$(PREFIX)/bin/$(BIN)"
+	@echo "installing assets to $(DESTDIR)$(ASSET_DIR)..."
+	mkdir -p "$(DESTDIR)$(ASSET_DIR)"
+	@install -d $(DESTDIR)$(ASSET_DIR)
+	@cp -r pets $(DESTDIR)$(ASSET_DIR)/
 	@echo "installing man page to $(DESTDIR)$(MAN_DIR)..."
 	@mkdir -p "$(DESTDIR)$(MAN_DIR)"
 	@install -m 644 $(MAN) "$(DESTDIR)$(MAN_DIR)/"

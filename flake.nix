@@ -26,11 +26,17 @@
             ];
             # Skip the configure phase as it's a simple 'make' build
             dontConfigure = true;
+            postPatch = ''
+            localAssetDir="$out/share/musu/pets/neko"
+            substituteInPlace config.h \
+                  --replace '#define PET_ASSET_DIR   "./pets/neko"' \
+                            '#define PET_ASSET_DIR   "'$localAssetDir'"'
+            '';
             buildPhase = ''
             make
             '';
             installPhase = ''
-            TERMINFO="$out" make install DESTDIR="$out" PREFIX=""
+            make install DESTDIR="$out" PREFIX=""
             '';
           };
           default = musu;
