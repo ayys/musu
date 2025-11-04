@@ -17,6 +17,8 @@
 #include <X11/Xlib.h>
 #include <X11/extensions/shape.h>
 #include <X11/xpm.h>
+#include <X11/Xft/Xft.h>
+#include <fontconfig/fontconfig.h>
 
 #include "xpet.h"
 #include "config.h"
@@ -54,7 +56,8 @@ int scr;
 int scr_width;
 int scr_height;
 XpmAttributes xpm_attrs;
-XFontSet font_set;
+XftFont *xft_font;
+XftDraw *xft_draw;
 
 struct mouse mouse;
 struct pet pet;
@@ -95,20 +98,35 @@ void draw_bubble(void)
 	}
 
 	XClearWindow(dpy, pet.bubble_window);
-	GC graphics_context = DefaultGC(dpy, scr);
-	XSetForeground(dpy, graphics_context, BlackPixel(dpy, scr));
 
-	if (font_set) {
-		XRectangle ink;
-		XRectangle log;
-
-		XmbTextExtents(font_set, pet.speech, (int)strlen(pet.speech), &ink, &log);
-		XmbDrawString(
-			dpy, pet.bubble_window, font_set, graphics_context,
-			SPEECH_PAD_X, SPEECH_PAD_Y - log.y, pet.speech, strlen(pet.speech)
+	if (xft_font && xft_draw) {
+		/* Xft uses UTF-8 strings directly */
+		int len = strlen(pet.speech);
+		XGlyphInfo extents;
+		XftTextExtentsUtf8(dpy, xft_font, (const FcChar8*)pet.speech, len, &extents);
+		
+		XftColor color;
+		Colormap colormap = DefaultColormap(dpy, scr);
+		XRenderColor xrender_color = {
+			.red = 0,
+			.green = 0,
+			.blue = 0,
+			.alpha = 0xFFFF
+		};
+		XftColorAllocValue(dpy, DefaultVisual(dpy, scr), colormap, &xrender_color, &color);
+		
+		XftDrawStringUtf8(
+			xft_draw, &color, xft_font,
+			SPEECH_PAD_X, SPEECH_PAD_Y + xft_font->ascent,
+			(const FcChar8*)pet.speech, len
 		);
+		
+		XftColorFree(dpy, DefaultVisual(dpy, scr), colormap, &color);
 	}
 	else {
+		/* Fallback to X11 core fonts */
+		GC graphics_context = DefaultGC(dpy, scr);
+		XSetForeground(dpy, graphics_context, BlackPixel(dpy, scr));
 		XFontStruct* f = XQueryFont(dpy, XGContextFromGC(graphics_context));
 		int ascent = f ? f->ascent : 12;
 		XDrawString(
@@ -450,8 +468,11 @@ void quit(void)
 	if (pet.bubble_window) {
 		XDestroyWindow(dpy, pet.bubble_window);
 	}
-	if (font_set) {
-		XFreeFontSet(dpy, font_set);
+	if (xft_draw) {
+		XftDrawDestroy(xft_draw);
+	}
+	if (xft_font) {
+		XftFontClose(dpy, xft_font);
 	}
 	for (int i = 0; i < STATE_LAST; i++) {
 		if (animations[i].frames) {
@@ -611,29 +632,46 @@ void setup(void)
 	scr_height = DisplayHeight(dpy, scr);
 	root = RootWindow(dpy, scr);
 
-	char** missing; /* missing character sets */
-	int n_missing;
-	char* def; /* default string */
-	const char* patterns[] = {
-		"-*-*-medium-r-*-*-14-*-*-*-*-*-*-*",
-		"fixed",
-		"*",
+	/* Initialize Xft */
+	if (!XftInit(NULL)) {
+		fputs("xpet: warning: Xft initialization failed\n", stderr);
+	}
+
+	/* Try to load IBM Plex Sans Devanagari using fontconfig */
+	const char *font_names[] = {
+		"IBM Plex Sans Devanagari:size=14",
+		"IBM Plex Sans Devanagari:size=16",
+		"IBM Plex Sans Devanagari:size=12",
+		"IBM Plex Sans Devanagari",
 		NULL
 	};
 
-	for (int i = 0; !font_set && patterns[i]; i++) {
-		font_set = XCreateFontSet(
-			dpy, patterns[i], &missing, &n_missing, &def
-		);
-
-		if (font_set && n_missing > 0) {
-			XFreeStringList(missing);
+	xft_font = NULL;
+	for (int i = 0; font_names[i] && !xft_font; i++) {
+		FcPattern *pat = FcNameParse((const FcChar8*)font_names[i]);
+		if (pat) {
+			FcConfigSubstitute(NULL, pat, FcMatchPattern);
+			FcDefaultSubstitute(pat);
+			
+			FcResult result;
+			FcPattern *match = FcFontMatch(NULL, pat, &result);
+			if (match) {
+				xft_font = XftFontOpenPattern(dpy, match);
+				if (xft_font) {
+					fprintf(stderr, "xpet: loaded font: %s\n", font_names[i]);
+				} else {
+					FcPatternDestroy(match);
+				}
+			}
+			FcPatternDestroy(pat);
 		}
 	}
 
-	if (!font_set) {
-		fputs("xpet: warn: no fontset; non-ascii will fallback\n", stderr);
+	if (!xft_font) {
+		fputs("xpet: warning: could not load Noto font; falling back to ASCII\n", stderr);
 	}
+
+	xft_draw = NULL;
 
 	srand((unsigned)time(NULL));
 	load_animations();
@@ -669,7 +707,7 @@ void show_speech_bubble(const char* s)
 		return;
 	}
 
-	if (!font_set) {
+	if (!xft_font) {
 		for (const unsigned char* p = (const unsigned char*)s; *p; p++) {
 			if (*p & 0x80) {
 				/* if no font set, replace it with ":3" */
@@ -697,11 +735,11 @@ void show_speech_bubble(const char* s)
 
 	int text_width = 0;
 	int text_height = 0;
-	if (font_set) {
-		XRectangle ink, log;
-		XmbTextExtents(font_set, s, (int)strlen(s), &ink, &log);
-		text_width = log.width;
-		text_height = log.height;
+	if (xft_font) {
+		XGlyphInfo extents;
+		XftTextExtentsUtf8(dpy, xft_font, (const FcChar8*)s, strlen(s), &extents);
+		text_width = extents.xOff;
+		text_height = xft_font->ascent + xft_font->descent;
 	}
 	else {
 		GContext gcontext = XGContextFromGC(DefaultGC(dpy, scr));
@@ -719,6 +757,16 @@ void show_speech_bubble(const char* s)
 	int by = CLAMP(pet.y - bh - 10, 10, scr_height - 10 - bh);
 
 	XMoveResizeWindow(dpy, pet.bubble_window, bx, by, bw, bh);
+	
+	/* Recreate XftDraw after window resize */
+	if (xft_draw) {
+		XftDrawDestroy(xft_draw);
+	}
+	if (xft_font) {
+		xft_draw = XftDrawCreate(dpy, pet.bubble_window, 
+			DefaultVisual(dpy, scr), DefaultColormap(dpy, scr));
+	}
+	
 	XMapWindow(dpy, pet.bubble_window);
 	draw_bubble();
 	XRaiseWindow(dpy, pet.bubble_window);
