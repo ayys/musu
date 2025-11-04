@@ -1,0 +1,290 @@
+#+title: Rewrite musu in GNU Guile
+#+author: Ayush Jha
+#+email:  ayys@duck.com
+#+language: English
+#+SETUPFILE: https://fniessen.github.io/org-html-themes/org/theme-bigblow.setup
+
+* Plan: Rewrite musu in Guile Scheme
+** Overview
+Convert the C desktop pet application to Guile Scheme, maintaining all
+existing features: pet animation, mouse chasing, dragging, speech
+bubbles, and keyboard controls.
+
+** Architecture
+*** Core Structure
+- *Main module*: =musu.scm= - Entry point and main event loop
+- *X11 bindings*: Use FFI to Xlib/Xpm/Xft/Xext (via =(system foreign)=
+  or external library)
+- *State management*: Scheme records/alists instead of C structs
+- *Animation system*: Load XPM frames, manage frame timing
+- *Event loop*: Guile's event handling with select-based timing
+
+*** Key Components
+1. *X11 Interface* (=x11.scm=)
+
+   - Display connection management
+   - Window creation and manipulation
+   - Shape extension for transparency
+   - Event handling (keyboard, mouse, motion)
+
+2. *Animation System* (=animation.scm=)
+
+   - Load XPM files from =pets/= directories
+   - Frame timing and state transitions
+   - Animation state enum → symbols (idle, sleeping, walk-north, etc.)
+
+3. *Pet State* (=pet.scm=)
+
+   - Pet record structure (position, state, animation frames)
+   - Movement logic (wander, chase mouse)
+   - State machine (idle, walking directions, dragged, happy, sleeping)
+
+4. *Speech Bubble* (=speech.scm=)
+
+   - Bubble window creation
+   - Xft text rendering (UTF-8 support for Nepali text)
+   - Timing and auto-hide
+
+5. *Configuration* (=config.scm=)
+
+   - Bindings (keyboard shortcuts)
+   - Pet phrases array
+   - Animation paths and timing constants
+
+** Implementation Details
+*** Data Structures
+- Pet: =(make-pet x y state ...)= record
+- Animation: =(make-animation name frames loop?)= record
+- Frame: =(make-frame pixmap mask duration)= record
+- Use =(ice-9 records)= for structured data
+
+*** X11 Access
+- Option A: Use existing Guile-X11 bindings if available
+- Option B: FFI via =(system foreign)= - direct Xlib calls
+- Option C: Minimal C wrapper library for X11 primitives
+
+*** Event Loop
+- Use =select= for timing (=PET_REFRESH= ms)
+- Process X11 events with =XNextEvent= via FFI
+- Update animation frames, pet position, speech timing
+
+*** File Structure
+#+begin_example
+musu/
+├── musu.scm          # Main entry point
+├── x11.scm           # X11 bindings and window management
+├── animation.scm     # Animation loading and frame management
+├── pet.scm           # Pet state and movement logic
+├── speech.scm        # Speech bubble rendering
+├── config.scm        # Configuration constants
+└── Makefile          # Build script (guile --no-auto-compile -s musu.scm)
+
+Keep existing: pets/ directory, README.md, musu.1 man page
+Note: use a nix environment via flake.nix for development and distribution
+#+end_example
+
+** Migration Strategy
+*** Phase 1: Core X11 Setup
+- Establish X11 display connection
+- Create main pet window
+- Basic window positioning and shape
+
+*** Phase 2: Animation Loading
+- Load XPM files from =pets/neko/= directories
+- Create frame list for each animation state
+- Display first frame
+
+*** Phase 3: Movement Logic
+- Implement =move-to= and =wander= functions
+- Add mouse chasing
+- Direction calculation (8 directions)
+
+*** Phase 4: Event Handling
+- Keyboard bindings (Alt+Shift+F/S/Q)
+- Mouse button events (drag, right-click for happy)
+- Motion events for dragging
+
+*** Phase 5: Speech Bubbles
+- Create bubble window
+- Xft font rendering
+- Nepali text display
+
+*** Phase 6: Polish
+- State transitions (sleeping after freeze, happy timeout)
+- Animation frame updates
+- Window raising/maintenance
+
+** Dependencies
+- Guile 3.0+
+- X11 development libraries (Xlib, Xpm, Xft, Xext)
+- FFI support for X11 or Guile-X11 bindings
+
+** Configuration
+- Preserve =config.h= constants as Scheme definitions in =config.scm=
+- Keep pet asset directory structure
+- Maintain keyboard bindings
+
+** FFI Requirements Analysis
+*** X11/Xlib Functions (libX11)
+- =XOpenDisplay= - Open display connection
+- =XCloseDisplay= - Close display
+- =DefaultScreen= - Get default screen number
+- =DisplayWidth= / =DisplayHeight= - Get screen dimensions
+- =RootWindow= - Get root window
+- =XCreateWindow= - Create window
+- =XDestroyWindow= - Destroy window
+- =XMapWindow= - Map window
+- =XUnmapWindow= - Unmap window
+- =XMoveWindow= - Move window
+- =XMoveResizeWindow= - Move and resize window
+- =XSetWindowBackgroundPixmap= - Set window background
+- =XClearWindow= - Clear window
+- =XRaiseWindow= - Raise window
+- =XSelectInput= - Select input events
+- =XPending= - Check for pending events
+- =XNextEvent= - Get next event
+- =XQueryPointer= - Query mouse position
+- =XKeysymToKeycode= - Convert keysym to keycode
+- =XGrabKey= - Grab keyboard key
+- =XLookupKeysym= - Get keysym from event
+- =XSetWindowAttributes= / =XSetWindowBackgroundPixmap= - Window
+  attributes
+- =XSetForeground= - Set GC foreground
+- =DefaultGC= - Get default graphics context
+- =XGContextFromGC= - Get GContext from GC
+- =DefaultVisual= - Get default visual
+- =DefaultColormap= - Get default colormap
+- =BlackPixel= / =WhitePixel= - Get pixel values
+- =XQueryFont= - Query font information
+- =XTextWidth= - Get text width
+- =XDrawString= - Draw text string
+- =XFreeFontInfo= - Free font info
+- =XFreePixmap= - Free pixmap
+
+*** X11/Xext Shape Extension (libXext)
+- =XShapeCombineMask= - Combine shape mask
+
+*** Xpm Functions (libXpm)
+- =XpmReadFileToPixmap= - Load XPM file to pixmap
+- =XpmSuccess= - Success constant
+- =XpmAttributes= - Structure type
+
+*** Xft Functions (libXft)
+- =XftInit= - Initialize Xft
+- =XftFontOpenPattern= - Open font from pattern
+- =XftFontClose= - Close font
+- =XftDrawCreate= - Create draw context
+- =XftDrawDestroy= - Destroy draw context
+- =XftTextExtentsUtf8= - Get text extents (UTF-8)
+- =XftDrawStringUtf8= - Draw UTF-8 string
+- =XftColorAllocValue= - Allocate color
+- =XftColorFree= - Free color
+- =XftDraw= / =XftFont= / =XftColor= - Structure types
+- =XGlyphInfo= - Structure type
+- =XRenderColor= - Structure type
+
+*** Fontconfig Functions (libfontconfig)
+- =FcNameParse= - Parse font name pattern
+- =FcConfigSubstitute= - Substitute fontconfig config
+- =FcDefaultSubstitute= - Apply default substitutions
+- =FcFontMatch= - Match font pattern
+- =FcPatternDestroy= - Destroy pattern
+- =FcPattern= / =FcResult= / =FcChar8= - Types
+
+*** X11 Constants and Types
+- Event types: =KeyPress=, =ButtonPress=, =ButtonRelease=,
+  =MotionNotify=, =Expose=
+- Event masks: =KeyPressMask=, =ButtonPressMask=, =ButtonReleaseMask=,
+  =PointerMotionMask=, =ExposureMask=
+- Button constants: =Button1=, =Button3=
+- Modifier masks: =Mod1Mask=, =ShiftMask=, =LockMask=, =Mod2Mask=
+- Window attributes: =CWOverrideRedirect=, =CWBackPixel=,
+  =CWBorderPixel=
+- InputOutput, CopyFromParent, ShapeBounding, ShapeSet
+- GrabModeAsync
+- True, False (Bool type)
+- KeySym, KeyCode, Window, Display, Pixmap, GC, GContext, Visual,
+  Colormap, Screen
+- XEvent, XButtonEvent, XMotionEvent, XKeyEvent, XExposeEvent
+
+*** Functions Available in Guile - NO FFI NEEDED
+*Standard C Library Functions (use Guile equivalents):*
+
+- =setlocale= → Locale handled automatically, or use
+  =(setlocale LC_ALL "")= if needed
+- =srand= / =rand= → Use =(random:seed)= and =(random)= from
+  =(ice-9 random)=
+- =time= → Use =(current-time)= or =(gettimeofday)= from =(ice-9 time)=
+- =select= for sleep → Use =(sleep)= from =(ice-9 threads)= or
+  =(usleep)= for milliseconds
+- =memset= → Not needed, Guile handles memory initialization
+- =fopen= / =fclose= → Use =(open-file)= / =(close-port)= from
+  =(ice-9 ports)=
+- =snprintf= → Use =(format)= from =(ice-9 format)=
+- =strlen= → Use =(string-length)=
+- =malloc= / =free= → Automatic memory management in Guile
+- =exit= → Use =(exit)= from =(ice-9 control)=
+- =perror= / =fprintf= / =fputs= → Use =(format)= with
+  =(current-error-port)= from =(ice-9 format)=
+- =printf= → Use =(format)= and =(display)= from =(ice-9 format)=
+
+*File System Operations:*
+
+- File existence checking → Use =(file-exists?)= from =(ice-9 file)=
+- File path operations → Use =(string-append)= or path utilities
+- Directory operations → Use =(opendir)= / =(readdir)= from
+  =(ice-9 directory)=
+
+*String Operations:*
+
+- All string manipulation → Full Scheme string support (=string-length=,
+  =string-append=, etc.)
+
+*Math Operations:*
+
+- All mathematical operations → Built-in Scheme arithmetic
+
+*Memory Management:*
+
+- All memory operations → Automatic garbage collection
+
+*** Key Constants Needed
+- =XK_f=, =XK_s=, =XK_q= - Keysym definitions (from X11/keysymdef.h)
+- Note: Most X11 constants are macros, may need manual definitions or
+  include headers
+
+*** FFI Implementation Strategy
+*Option A: Pure FFI via (system foreign)*
+
+- Bind all functions directly using =dynamic-func= and
+  =pointer->procedure=
+- Define C structures as bytevectors or use =make-struct=
+- Define constants manually
+- Most complex but most portable
+
+*Option B: Minimal C Wrapper*
+
+- Create small C library with wrappers for X11 operations
+- Reduces FFI complexity but adds compilation step
+- Could wrap complex operations (event handling, Xft initialization)
+
+*Option C: Existing Guile Bindings*
+
+- Check for guile-x11 or similar packages
+- May not cover all needed functions (Xft, Xpm, Fontconfig)
+- Would need to mix FFI and bindings
+
+*Recommended Approach*: Option A (Pure FFI) for maximum portability,
+with helper macros for common X11 structure access.
+
+** Minimal Implementation Notes
+- Use simple records, avoid complex OOP
+- Direct FFI calls where possible, avoid heavy abstractions
+- Keep event loop straightforward (select + XNextEvent)
+- Reuse existing XPM files and asset structure
+- Define X11 constants as Scheme constants
+- Use =(system foreign)= for FFI, =pointer->procedure= for function
+  calls
+- Structure access via =pointer->bytevector= or manual offset
+  calculations
+
