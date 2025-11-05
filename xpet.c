@@ -33,6 +33,9 @@ void on_button_press(XButtonEvent* b);
 void on_button_release(XButtonEvent* b);
 void on_key(KeySym sym);
 void on_motion(XMotionEvent* m);
+void pet_freeze(void);
+void pet_chase(void);
+void pet_interact(void);
 void pick_random_destination(void);
 void quit(void);
 void run(void);
@@ -281,7 +284,10 @@ enum state find_octant(int delta_x, int delta_y)
 
 void on_button_press(XButtonEvent* b)
 {
-	if (b->button == Button1) {
+	Bool shifting = b->state & ShiftMask;
+
+	/* left click */
+	if (b->button == Button1) { /* drag pet */
 		pet.was_chasing = pet.chasing;
 		pet.was_frozen = pet.frozen;
 		pet.dragging = True;
@@ -291,21 +297,21 @@ void on_button_press(XButtonEvent* b)
 		pet.chasing = False;
 		set_pet_state(DRAGGED);
 	}
-	else if (b->button == Button3) {
-		if (pet.state != HAPPY) {
-			pet.previous_state = pet.state;
-			set_pet_state(HAPPY);
-			pet.happy_time = 0;
 
-			int n = 0;
-			while (pet_phrases[n]) {
-				n++;
-			}
+	/* middle click */
+	else if (b->button == Button2 && shifting) { /* follow cursor */
+		pet_chase();
+	}
+	else if (b->button == Button2) { /* freeze pet */
+		pet_freeze();
+	}
 
-			if (n > 0) {
-				show_speech_bubble(pet_phrases[rand() % n]);
-			}
-		}
+	/* right click */
+	else if (b->button == Button3 && shifting) { /* interact (talk) */
+		quit();
+	}
+	else if (b->button == Button3) { /* interact (talk) */
+		pet_interact();
 	}
 }
 
@@ -337,21 +343,10 @@ void on_button_release(XButtonEvent* b)
 void on_key(KeySym sym)
 {
 	if (sym == bindings[0].sym) { /* chasing */
-		pet.chasing = !pet.chasing;
-		if (pet.chasing) {
-			pet.frozen = False;
-			set_pet_state(E);
-		}
-		else {
-			pick_random_destination();
-		}
+		pet_chase();
 	}
 	else if (sym == bindings[1].sym) { /* freeze */
-		pet.frozen = !pet.frozen;
-		if (pet.frozen) {
-			set_pet_state(IDLE);
-			pet.frozen_time = 0;
-		}
+		pet_freeze();
 	}
 	else if (sym == bindings[2].sym) { /* quit */
 		quit();
@@ -372,6 +367,45 @@ void on_motion(XMotionEvent* m)
 	XMoveWindow(dpy, pet.window, pet.x, pet.y);
 	if (pet.speech) {
 		show_speech_bubble(pet.speech);
+	}
+}
+
+void pet_freeze(void)
+{
+	pet.frozen = !pet.frozen;
+	if (pet.frozen) {
+		set_pet_state(IDLE);
+		pet.frozen_time = 0;
+	}
+}
+
+void pet_chase(void)
+{
+	pet.chasing = !pet.chasing;
+	if (pet.chasing) {
+		pet.frozen = False;
+		set_pet_state(E);
+	}
+	else {
+		pick_random_destination();
+	}
+}
+
+void pet_interact(void)
+{
+	if (pet.state != HAPPY) {
+		pet.previous_state = pet.state;
+		set_pet_state(HAPPY);
+		pet.happy_time = 0;
+
+		int phrases = 0;
+		while (pet_phrases[phrases]) {
+			phrases++;
+		}
+
+		if (phrases > 0) {
+			show_speech_bubble(pet_phrases[rand() % phrases]);
+		}
 	}
 }
 
@@ -582,7 +616,10 @@ void setup(void)
 	set_pet_state(IDLE);
 	pick_random_destination();
 	create_window();
-	grab_keys();
+
+	if (!MULTIPLE_PETS) {
+		grab_keys();
+	}
 	XSelectInput(dpy, root, KeyPressMask);
 }
 
