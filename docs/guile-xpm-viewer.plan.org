@@ -1,0 +1,158 @@
+#+title: Guile XPM Animation Viewer
+#+author: Ayush Jha
+#+email:  ayys@duck.com
+#+language: English
+#+SETUPFILE: https://fniessen.github.io/org-html-themes/org/theme-bigblow.setup
+
+* Plan: Simple XPM Animation Viewer in Guile Scheme
+** Overview
+A minimal standalone tool that loads and displays XPM animation frames
+from a directory. Useful for previewing pet animations and as a stepping
+stone toward the full musu pet application.
+
+** Scope
+- Load XPM files from a directory (e.g., =pets/neko/idle/=)
+- Display frames in a transparent X11 window
+- Cycle through frames with configurable timing
+- Basic controls: pause/resume, quit
+- No movement, no mouse interaction, no speech bubbles
+
+** Use Cases
+- Preview animations before integrating into full pet
+- Test XPM loading and display logic
+- Validate FFI bindings for X11/Xpm/Xext
+- Debug animation frame timing
+
+** Architecture
+*** Core Structure
+- *Main module*: =xpm-viewer.scm= - Entry point and event loop
+- *X11 bindings*: Minimal FFI for Xlib/Xpm/Xext
+- *Animation loader*: Scan directory, load XPM frames
+- *Frame display*: Update window pixmap and shape mask
+
+*** File Structure
+#+begin_example
+musu/
+├── xpm-viewer.scm       # Main entry point
+├── x11-minimal.scm      # Core X11 FFI bindings
+└── Makefile             # Run script (guile -s xpm-viewer.scm DIR)
+
+Usage:
+  guile -s xpm-viewer.scm pets/neko/idle
+  guile -s xpm-viewer.scm pets/dog/walk_north
+#+end_example
+
+** Implementation Details
+*** Data Structures
+- Frame: =(make-frame pixmap mask)= record
+- Animation: =(make-animation frames current-frame paused?)= record
+- Viewer: =(make-viewer display window animation)= record
+
+*** X11 Functions Needed (Minimal Set)
+*libX11:*
+- =XOpenDisplay= - Open display connection
+- =XCloseDisplay= - Close display
+- =DefaultScreen= - Get default screen number
+- =RootWindow= - Get root window
+- =XCreateWindow= - Create window
+- =XDestroyWindow= - Destroy window
+- =XMapWindow= - Map window
+- =XSetWindowBackgroundPixmap= - Set window background
+- =XClearWindow= - Clear window
+- =XSelectInput= - Select input events
+- =XPending= - Check for pending events
+- =XNextEvent= - Get next event
+- =XDefaultGC= - Get default graphics context
+- =XFreePixmap= - Free pixmap
+
+*libXext (Shape Extension):*
+- =XShapeCombineMask= - Apply transparency mask
+
+*libXpm:*
+- =XpmReadFileToPixmap= - Load XPM file
+- =XpmSuccess= - Success return code
+
+*** X11 Constants Needed
+- Window attributes: =CWOverrideRedirect=
+- Window class: =InputOutput=
+- Visual: =CopyFromParent=
+- Shape: =ShapeBounding=, =ShapeSet=
+- Event types: =KeyPress=, =Expose=
+- Event masks: =KeyPressMask=, =ExposureMask=
+- Keysym: =XK_space= (pause), =XK_q= (quit), =XK_Escape= (quit)
+
+*** FFI Strategy
+- Use =(system foreign)= with =dynamic-func= and =pointer->procedure=
+- Define constants manually (as integers)
+- Simple structures: use bytevectors or pass individual values
+- Start with hardcoded paths, add CLI args later
+
+*** Event Loop
+- Use =(sleep)= or =(usleep)= for frame timing (200ms default)
+- Process X11 events with =XNextEvent=
+- Handle =KeyPress= events (space=pause, q=quit)
+- Handle =Expose= events (redraw current frame)
+- Update animation frame counter on timer
+
+** Implementation Steps
+*** Phase 1: X11 Connection
+- Open display connection
+- Get root window and screen info
+- Test basic X11 FFI bindings
+
+*** Phase 2: Window Creation
+- Create simple window (64x64, override redirect)
+- Map window to screen
+- Verify window appears
+
+*** Phase 3: XPM Loading
+- Load single XPM file via FFI
+- Display pixmap in window
+- Apply shape mask for transparency
+
+*** Phase 4: Directory Scanning
+- List files in directory (sorted numerically)
+- Load all XPM frames
+- Store pixmaps and masks
+
+*** Phase 5: Animation Loop
+- Update frame counter every 200ms
+- Switch window pixmap and mask
+- Handle wrap-around (loop)
+
+*** Phase 6: Event Handling
+- Process keyboard events
+- Space key toggles pause/resume
+- Q/Escape quits application
+
+** Configuration
+- Frame duration: 200ms (hardcoded, can be made configurable)
+- Window size: Auto-detect from first frame (default 64x64)
+- Window position: Center of screen (or accept x,y args)
+
+** Dependencies
+- Guile 3.0+
+- X11 development libraries (Xlib, Xpm, Xext)
+- FFI support via =(system foreign)=
+
+** Success Criteria
+- Successfully loads and displays XPM animations
+- Window has proper transparency (via shape extension)
+- Smooth frame cycling
+- Responds to keyboard controls
+- Clean exit with resource cleanup
+
+** Future Extensions (Out of Scope)
+- CLI arguments for directory path
+- Frame duration adjustment
+- Window dragging
+- Multiple animation directory support
+- Playback speed control
+
+** Notes
+- This is a minimal, standalone tool
+- Focus on getting FFI working correctly
+- Can be extended incrementally
+- Useful for testing before full pet implementation
+
+

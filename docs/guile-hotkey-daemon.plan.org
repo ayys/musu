@@ -1,0 +1,243 @@
+#+title: Guile Global Hotkey Daemon
+#+author: Ayush Jha
+#+email:  ayys@duck.com
+#+language: English
+
+
+* Plan: Global Hotkey Daemon in Guile Scheme
+** Overview
+A minimal daemon that grabs global keyboard shortcuts and executes
+callbacks. Demonstrates X11 keyboard grabbing functionality needed for
+the musu pet application's global keybindings (Alt+Shift+F/S/Q).
+
+** Scope
+- Grab global keyboard shortcuts (work from any window)
+- Handle modifier key combinations (Alt+Shift)
+- Execute user-defined callbacks on keypress
+- Handle modifier lock states (CapsLock, NumLock)
+- No window creation, no graphics, just keyboard handling
+
+** Use Cases
+- Test X11 keyboard grabbing before integrating into pet
+- Validate modifier key handling (Alt+Shift combinations)
+- Debug keybinding conflicts
+- General-purpose hotkey handler for other applications
+- Verify FFI bindings for XGrabKey/XKeysymToKeycode
+
+** Architecture
+*** Core Structure
+- *Main module*: =hotkey-daemon.scm= - Entry point and event loop
+- *X11 bindings*: Minimal FFI for Xlib keyboard functions
+- *Keymap system*: Emacs-style keymap for storing bindings
+- *Key parser*: Parse Emacs-style key sequences (e.g., "M-S-f")
+- *Event handler*: Process KeyPress events and invoke callbacks
+
+*** File Structure
+#+begin_example
+musu/
+├── hotkey-daemon.scm    # Main entry point
+├── x11-keys.scm         # X11 keyboard FFI bindings
+├── keymap.scm           # Emacs-style keymap system
+└── Makefile             # Run script (guile -s hotkey-daemon.scm)
+
+Usage:
+  guile -s hotkey-daemon.scm
+#+end_example
+
+*** Emacs-Style Interface
+The interface resembles Emacs' keybinding system:
+- =define-key=: Define keybindings directly
+- =kbd=: Parse key sequences (e.g., "M-S-f" for Alt+Shift+F)
+- Keymap: Internal data structure for storing bindings
+
+** Keybinding Interface
+*** Function: =(define-key key-sequence command)=
+Define a keybinding.
+
+- =key-sequence=: String like "M-S-f" or parsed key sequence
+- =command=: Function to call when key is pressed
+
+*** Function: =(kbd key-string)=
+Parse an Emacs-style key sequence string into internal representation.
+
+- =key-string=: String like "M-S-f", "C-x C-c", "M-S-q"
+- Returns: Parsed key sequence usable by =define-key=
+
+*** Key Sequence Syntax
+- =M-= or =META-=: Meta key (Alt key)
+- =S-= or =SHIFT-=: Shift key
+- =C-= or =CONTROL-=: Control key
+- =M-S-=: Meta+Shift combination
+- =C-M-=: Control+Meta combination
+- Single character: The key itself (case-sensitive)
+
+Examples:
+- ="M-S-f"= → Alt+Shift+F
+- ="M-S-s"= → Alt+Shift+S  
+- ="M-S-q"= → Alt+Shift+Q
+- ="C-x C-c"= → Control+X then Control+C (sequence)
+
+
+** Implementation Details
+*** Data Structures
+- Keymap: Hash table or alist mapping key sequences to commands
+- Key-sequence: Parsed representation of key combination (keysym + modifiers)
+- Binding: Internal structure =(make-binding keysym mask callback)= record
+- Daemon: =(make-daemon display keymap running?)= record
+
+*** X11 Functions Needed (Minimal Set)
+*libX11:*
+- =XOpenDisplay= - Open display connection
+- =XCloseDisplay= - Close display
+- =DefaultScreen= - Get default screen number
+- =RootWindow= - Get root window
+- =XKeysymToKeycode= - Convert keysym to keycode
+- =XGrabKey= - Grab keyboard shortcut globally
+- =XUngrabKey= - Release keyboard shortcut
+- =XSelectInput= - Select input events (KeyPressMask)
+- =XPending= - Check for pending events
+- =XNextEvent= - Get next event
+- =XLookupKeysym= - Get keysym from key event
+
+*** X11 Constants Needed
+- Event types: =KeyPress=
+- Event masks: =KeyPressMask=
+- Modifier masks: =Mod1Mask= (Alt), =ShiftMask=, =LockMask=, =Mod2Mask=
+- Grab mode: =GrabModeAsync=
+- Keysym definitions: =XK_f=, =XK_s=, =XK_q=
+- Boolean: =True=, =False=
+
+*** Keybinding Strategy
+- Parse key sequences using =kbd= function (parse "M-S-f" to keysym + modifiers)
+- Grab keys on root window (works globally)
+- Handle all modifier lock combinations:
+  - Base: Mod1Mask | ShiftMask
+  - With CapsLock: Mod1Mask | ShiftMask | LockMask
+  - With NumLock: Mod1Mask | ShiftMask | Mod2Mask
+  - With Both: Mod1Mask | ShiftMask | LockMask | Mod2Mask
+- Store bindings in keymap hash table/alist
+- On KeyPress event, lookup keysym and mask in keymap, invoke command
+- Commands are just Scheme procedures
+
+*** Event Loop
+- Select input on root window (KeyPressMask)
+- Process events with =XNextEvent=
+- Extract keysym using =XLookupKeysym=
+- Match against registered bindings
+- Invoke callback if match found
+- Continue until quit binding triggered
+
+** Implementation Steps
+*** Phase 1: X11 Connection
+- Open display connection
+- Get root window
+- Test basic X11 FFI bindings
+
+*** Phase 2: Keysym to Keycode
+- Bind =XKeysymToKeycode= via FFI
+- Test converting XK_f to keycode
+- Verify keycode is valid
+
+*** Phase 3: Keyboard Grabbing
+- Bind =XGrabKey= via FFI
+- Grab single key combination (Alt+Shift+F)
+- Test that grab succeeds
+- Handle all modifier lock combinations
+
+*** Phase 4: Event Processing
+- Select KeyPress events on root window
+- Process events with =XNextEvent=
+- Extract keysym with =XLookupKeysym=
+- Print keysym for debugging
+
+*** Phase 5: Keymap System
+- Implement =kbd= function to parse key sequences
+- Create keymap data structure (hash table or alist)
+- Implement =define-key= function (no keymap parameter needed)
+- Register bindings using =define-key=
+
+*** Phase 6: Command Execution
+- Match events to keymap entries
+- Invoke command procedures
+- Handle undefined keys (optionally ignore or warn)
+- Support command sequences (future: multi-key sequences)
+
+** Configuration
+Default bindings are defined using Emacs-style interface:
+
+#+begin_example
+(define (toggle-chasing)
+  (display "Toggle chasing\n"))
+
+(define (toggle-freeze)
+  (display "Toggle freeze\n"))
+
+(define (quit-daemon)
+  (display "Quitting...\n")
+  (exit 0))
+
+;; Define keybindings using Emacs-style interface
+(define-key (kbd "M-S-f") toggle-chasing)
+(define-key (kbd "M-S-s") toggle-freeze)
+(define-key (kbd "M-S-q") quit-daemon)
+#+end_example
+
+** Example Usage
+#+begin_example
+;; Simple example
+(define-key (kbd "M-S-f") 
+  (lambda () (display "F pressed!\n")))
+
+;; Using named functions
+(define-key (kbd "M-S-q") quit-daemon)
+
+;; Multiple modifiers
+(define-key (kbd "C-M-s") 
+  (lambda () (display "Control+Meta+S\n")))
+#+end_example
+
+** Dependencies
+- Guile 3.0+
+- X11 development libraries (Xlib)
+- FFI support via =(system foreign)=
+
+** Success Criteria
+- Successfully grabs global keyboard shortcuts
+- Responds to Alt+Shift+F/S/Q from any window
+- Handles modifier lock states correctly
+- Executes callbacks reliably
+- Clean exit on quit binding
+
+** Edge Cases to Handle
+- Modifier lock states (CapsLock, NumLock)
+- Key already grabbed by another application
+- Multiple modifiers (all combinations)
+- Display disconnect (should handle gracefully)
+
+** Future Extensions (Out of Scope)
+- Config file for bindings (could use Scheme code)
+- Dynamic binding registration/unregistration (already supported via =define-key=)
+- Keybinding conflict detection
+- Daemon mode (fork to background)
+- IPC for external control
+- Multiple display support
+- Key sequences (multi-key bindings like "C-x C-c")
+- Multiple keymaps (per-application or context-specific)
+- Key remapping/chaining
+- Interactive key prompt (=read-key=)
+
+** Notes
+- This is a minimal, standalone tool
+- Focus on getting XGrabKey working correctly
+- Essential for musu pet's global shortcuts
+- Can be used as general hotkey handler
+- No window needed - just keyboard event handling
+
+** Testing Strategy
+- Test each binding individually
+- Test with various modifier lock states
+- Test with other applications focused
+- Test key conflicts (if another app grabs same key)
+- Verify cleanup on exit
+
+
