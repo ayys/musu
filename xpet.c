@@ -657,9 +657,7 @@ void setup(void)
 			FcPattern *match = FcFontMatch(NULL, pat, &result);
 			if (match) {
 				xft_font = XftFontOpenPattern(dpy, match);
-				if (xft_font) {
-					fprintf(stderr, "xpet: loaded font: %s\n", font_names[i]);
-				} else {
+				if (!xft_font) {
 					FcPatternDestroy(match);
 				}
 			}
