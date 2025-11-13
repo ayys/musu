@@ -1,0 +1,20 @@
+#+title: The Guile API for musu
+#+author: ayys
+#+OPTIONS: toc:nil
+
+
+* Intro
+The Guile  API for  Musu describes  two layers  of the  API I  need to
+implement to get musu running from Guile.
+
+The first is the top level  interface which can be customized by users
+to change  the behaviour of Musu.  This includes being able  to change
+the animation  flow, art,  and the movement  mechanics of  Musu. Using
+this, users can in theory, create a more interactive musu that perhaps
+sleeps when it's late, or is more playful in the afternoon.
+
+* FFI transition plans
+This section  outlines the  FFI design  for **musu**.  The goal  is to
+allow users to  write custom logic that gets incorportated  into the C
+core  by separating  the stable  C  core from  the customizable  Guile
+environment using **Hooks** and **Advice** for logic injection.
